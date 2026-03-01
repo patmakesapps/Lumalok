@@ -5,19 +5,33 @@
   "main": "main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && electron-builder",
+    "build:ui": "vite build",
+    "build": "npm run build:ui && electron-builder --publish never",
+    "build:win": "npm run build:ui && electron-builder --win nsis portable --publish never",
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.yourname.vault",
+    "appId": "com.patmakesapps.vault",
     "productName": "Vault",
-    "icon": "src/assets/icon",
+    "icon": "src/assets/icon.png",
     "directories": {
       "output": "dist-electron"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "compression": "maximum",
     "win": {
-      "target": "nsis",
-      "icon": "src/assets/icon.ico"
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/assets/icon.ico",
+      "publisherName": "patmakesapps"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always"
     },
     "mac": {
       "target": "dmg",
