@@ -83,12 +83,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
-  // Hide to tray on close instead of quitting
-  mainWindow.on('close', (e) => {
-    if (!app.isQuiting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
+  // Quit on close (security: don't keep decrypted data in memory)
+  mainWindow.on('close', () => {
+    app.isQuiting = true;
+    app.quit();
   });
 }
 
