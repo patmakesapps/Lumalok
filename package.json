@@ -13,8 +13,8 @@
   },
   "build": {
     "appId": "com.lumalien.vault",
-    "productName": "Lumalien Vault",
-    "icon": "src/assets/icon.png",
+    "productName": "Vault",
+    "icon": "src/assets/icon.ico",
     "directories": {
       "output": "dist-electron"
     },
@@ -34,7 +34,10 @@
       "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": "always"
+      "createDesktopShortcut": "always",
+      "installerIcon": "src/assets/icon.ico",
+      "uninstallerIcon": "src/assets/icon.ico",
+      "installerHeaderIcon": "src/assets/icon.ico"
     },
     "portable": {
       "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
@@ -50,7 +53,9 @@
     "files": [
       "dist/**/*",
       "main.js",
-      "preload.js"
+      "preload.js",
+      "src/assets/icon.png",
+      "src/assets/icon.ico"
     ]
   },
   "devDependencies": {

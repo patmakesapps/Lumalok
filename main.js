@@ -5,6 +5,15 @@ const fs = require('fs');
 const isDev = !app.isPackaged;
 let mainWindow;
 let tray;
+const APP_ID = 'com.lumalien.vault';
+
+function resolveAssetPath(...segments) {
+  const devPath = path.join(__dirname, ...segments);
+  const packagedPath = path.join(process.resourcesPath, ...segments);
+  if (fs.existsSync(devPath)) return devPath;
+  if (fs.existsSync(packagedPath)) return packagedPath;
+  return devPath;
+}
 
 // ─── Auto-backup config ───────────────────────────────────────────────────────
 // Change this to your Dropbox / iCloud / Google Drive folder path
@@ -33,6 +42,7 @@ function setBackupDir(dir) {
 // ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
   const distIndexPath = path.join(__dirname, 'dist/index.html');
+  const windowIconPath = resolveAssetPath('src', 'assets', 'icon.ico');
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -47,7 +57,7 @@ function createWindow() {
       nodeIntegration: false,   // Security: no Node in renderer
       sandbox: false
     },
-    icon: path.join(__dirname, 'src/assets/icon.png'),
+    icon: windowIconPath,
     show: false,
   });
 
@@ -85,7 +95,7 @@ function createWindow() {
 function createTray() {
   // Use a simple fallback if icon not found
   let trayIcon;
-  const iconPath = path.join(__dirname, 'src/assets/icon.png');
+  const iconPath = resolveAssetPath('src', 'assets', 'icon.png');
   if (fs.existsSync(iconPath)) {
     trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
   } else {
@@ -172,6 +182,10 @@ ipcMain.handle('vault:get-backup-dir', () => {
 });
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID);
+}
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
