@@ -2,6 +2,7 @@
   "name": "vault-app",
   "version": "1.0.0",
   "description": "Your personal encrypted secrets vault",
+  "author": "patmakesapps",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -17,7 +18,7 @@
     "directories": {
       "output": "dist-electron"
     },
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
     "asar": true,
     "compression": "maximum",
     "win": {
@@ -26,12 +27,17 @@
         "portable"
       ],
       "icon": "src/assets/icon.ico",
+      "signAndEditExecutable": false,
       "publisherName": "patmakesapps"
     },
     "nsis": {
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
     },
     "mac": {
       "target": "dmg",
