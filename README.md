@@ -1,4 +1,4 @@
-# VAULT — Personal Secrets Manager
+# Lumalok — Personal Secrets Manager
 
 Your encrypted, local-first secrets vault. AES-256-GCM encrypted. Electron desktop app.
 
@@ -12,7 +12,7 @@ Your encrypted, local-first secrets vault. AES-256-GCM encrypted. Electron deskt
 ### Run in dev mode
 ```bash
 # 1. Unzip / navigate to this folder
-cd vault-app
+cd lumalok
 
 # 2. Install dependencies (one time)
 npm install
@@ -32,9 +32,9 @@ npm run build
 ```
 
 This outputs to the `dist-electron/` folder:
-- **Windows**: `Vault Setup 1.0.0.exe`
-- **macOS**: `Vault-1.0.0.dmg`
-- **Linux**: `Vault-1.0.0.AppImage`
+- **Windows**: `Lumalok Setup 1.0.0.exe`
+- **macOS**: `Lumalok-1.0.0.dmg`
+- **Linux**: `Lumalok-1.0.0.AppImage`
 
 ---
 
@@ -52,7 +52,7 @@ To use a custom icon, replace these files in `src/assets/`:
 1. Open the app and unlock your vault
 2. Click **Settings** in the sidebar
 3. Choose a folder — point it at your **Dropbox**, **iCloud Drive**, or **Google Drive** folder
-4. Every time you save an entry, a timestamped `.vault` backup is written there automatically
+4. Every time you save an entry, a timestamped `.lumalok` backup is written there automatically
 
 The backup file is fully encrypted. Even if someone gets the file, they can't read it without your master password.
 
