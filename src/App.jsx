@@ -72,6 +72,7 @@ const now = () => new Date().toISOString();
 const CATEGORIES = ["API Key", "Password", "Email", "Token", "Certificate", "SSH Key", "Database", "Other"];
 const BRAND_NAME = "LUMALIEN";
 const BRAND_TAGLINE = "OWN YOUR POTENTIAL.";
+const LUMAKIT_REPO_URL = "https://github.com/patmakesapps/LumaKit";
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -331,6 +332,8 @@ export default function App() {
   const [editingProjectName, setEditingProjectName] = useState("");
   const [showAbout, setShowAbout] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [integrationConfig, setIntegrationConfig] = useState(null);
+  const [revealedEntryIds, setRevealedEntryIds] = useState(() => new Set());
 
   // Entry form
   const [eTitle, setETitle] = useState("");
@@ -357,6 +360,7 @@ export default function App() {
     // Load backup dir if in Electron
     if (isElectron) {
       window.vaultAPI.getBackupDir().then(dir => setBackupDir(dir));
+      window.vaultAPI.getIntegrationConfig?.().then(config => setIntegrationConfig(config));
     }
   }, []);
 
@@ -483,6 +487,15 @@ export default function App() {
     showToast("Copied to clipboard");
   };
 
+  const toggleEntryReveal = (id) => {
+    setRevealedEntryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const exportVault = async () => {
     const enc = await encryptData({ projects, entries }, masterPwd);
     if (isElectron) {
@@ -529,7 +542,180 @@ export default function App() {
     if (res.ok) { setBackupDir(res.dir); showToast("Auto-backup folder set"); }
   };
 
+  const openLumaKitRepo = async () => {
+    if (isElectron && window.vaultAPI.openExternal) {
+      const res = await window.vaultAPI.openExternal(LUMAKIT_REPO_URL);
+      if (!res.ok) showToast(res.reason || "Could not open LumaKit", "err");
+      return;
+    }
+    window.open(LUMAKIT_REPO_URL, "_blank", "noopener,noreferrer");
+  };
+
   // ─── Derived ───────────────────────────────────────────────────────────────
+  const setIntegrationEnabled = async (enabled) => {
+    if (!isElectron) return;
+    const config = await window.vaultAPI.setIntegrationEnabled(enabled);
+    setIntegrationConfig(config);
+    showToast(enabled ? "LumaKit integration enabled" : "LumaKit integration disabled");
+  };
+
+  const formatTags = (value) => {
+    if (Array.isArray(value)) return value.map(t => String(t).trim()).filter(Boolean);
+    if (typeof value === "string") return value.split(",").map(t => t.trim()).filter(Boolean);
+    return [];
+  };
+
+  const publicEntry = useCallback((entry, includeValue = false) => {
+    const project = projects.find(p => p.id === entry.projectId);
+    return {
+      id: entry.id,
+      title: entry.title,
+      category: entry.category,
+      projectId: entry.projectId,
+      projectName: project?.name || "",
+      tags: entry.tags || [],
+      note: entry.note || "",
+      expiry: entry.expiry || "",
+      daysUntilExpiry: daysUntil(entry.expiry),
+      created: entry.created || "",
+      updated: entry.updated || "",
+      ...(includeValue ? { value: entry.value } : {}),
+    };
+  }, [projects]);
+
+  const handleIntegrationRequest = useCallback(async ({ action, payload = {} }) => {
+    if (!unlocked) return { statusCode: 423, body: { error: "Lumalok is locked. Unlock the vault first." } };
+
+    if (action === "overview") {
+      const expiringEntries = entries
+        .map(e => publicEntry(e))
+        .filter(e => e.daysUntilExpiry !== null && e.daysUntilExpiry <= 30)
+        .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+
+      return {
+        body: {
+          projects: projects.length,
+          secrets: entries.length,
+          expiringSoon: expiringEntries.filter(e => e.daysUntilExpiry >= 0 && e.daysUntilExpiry <= 30).length,
+          expired: expiringEntries.filter(e => e.daysUntilExpiry < 0).length,
+          expiring: expiringEntries,
+        },
+      };
+    }
+
+    if (action === "listProjects") {
+      return {
+        body: {
+          projects: projects.map(p => ({
+            ...p,
+            secretCount: entries.filter(e => e.projectId === p.id).length,
+          })),
+        },
+      };
+    }
+
+    if (action === "createProject") {
+      const name = String(payload.name || "").trim();
+      if (!name) return { statusCode: 400, body: { error: "Project name is required." } };
+      const existing = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+      if (existing) return { body: { project: existing, existing: true } };
+
+      const project = { id: uid(), name, created: now() };
+      const nextProjects = [...projects, project];
+      setProjects(nextProjects);
+      await persist(nextProjects, entries);
+      return { statusCode: 201, body: { project } };
+    }
+
+    if (action === "listSecrets") {
+      const q = String(payload.q || "").toLowerCase();
+      const projectId = String(payload.projectId || "");
+      const includeValues = payload.includeValues === true;
+      const matches = entries.filter(e => {
+        const matchProject = projectId ? e.projectId === projectId : true;
+        const haystack = `${e.title} ${e.category} ${e.note || ""} ${(e.tags || []).join(" ")}`.toLowerCase();
+        return matchProject && (!q || haystack.includes(q));
+      });
+      return { body: { secrets: matches.map(e => publicEntry(e, includeValues)) } };
+    }
+
+    if (action === "getSecret") {
+      const entry = entries.find(e => e.id === payload.id);
+      if (!entry) return { statusCode: 404, body: { error: "Secret not found." } };
+      return { body: { secret: publicEntry(entry, payload.reveal === true) } };
+    }
+
+    if (action === "createSecret") {
+      const title = String(payload.title || "").trim();
+      const value = String(payload.value || "").trim();
+      if (!title || !value) return { statusCode: 400, body: { error: "Secret title and value are required." } };
+
+      let nextProjects = projects;
+      let projectId = payload.projectId || "";
+      const projectName = String(payload.projectName || "").trim();
+      if (!projectId && projectName) {
+        let project = projects.find(p => p.name.toLowerCase() === projectName.toLowerCase());
+        if (!project) {
+          project = { id: uid(), name: projectName, created: now() };
+          nextProjects = [...projects, project];
+        }
+        projectId = project.id;
+      }
+      if (!projectId) projectId = projects[0]?.id || "";
+      if (!projectId) {
+        const project = { id: uid(), name: "General", created: now() };
+        nextProjects = [project];
+        projectId = project.id;
+      }
+
+      const entry = {
+        id: uid(),
+        title,
+        value,
+        category: payload.category || "Password",
+        tags: formatTags(payload.tags),
+        note: payload.note || "",
+        expiry: payload.expiry || "",
+        projectId,
+        created: now(),
+      };
+      const nextEntries = [...entries, entry];
+      setProjects(nextProjects);
+      setEntries(nextEntries);
+      await persist(nextProjects, nextEntries);
+      return { statusCode: 201, body: { secret: publicEntry(entry, false) } };
+    }
+
+    if (action === "updateSecret") {
+      const existing = entries.find(e => e.id === payload.id);
+      if (!existing) return { statusCode: 404, body: { error: "Secret not found." } };
+      const nextEntries = entries.map(e => {
+        if (e.id !== payload.id) return e;
+        return {
+          ...e,
+          ...(payload.title !== undefined ? { title: String(payload.title).trim() } : {}),
+          ...(payload.value !== undefined ? { value: String(payload.value) } : {}),
+          ...(payload.category !== undefined ? { category: payload.category || "Password" } : {}),
+          ...(payload.tags !== undefined ? { tags: formatTags(payload.tags) } : {}),
+          ...(payload.note !== undefined ? { note: payload.note || "" } : {}),
+          ...(payload.expiry !== undefined ? { expiry: payload.expiry || "" } : {}),
+          ...(payload.projectId !== undefined ? { projectId: payload.projectId } : {}),
+          updated: now(),
+        };
+      });
+      setEntries(nextEntries);
+      await persist(projects, nextEntries);
+      return { body: { secret: publicEntry(nextEntries.find(e => e.id === payload.id), false) } };
+    }
+
+    return { statusCode: 404, body: { error: "Unknown Lumalok integration action." } };
+  }, [unlocked, projects, entries, persist, publicEntry]);
+
+  useEffect(() => {
+    if (!isElectron || !window.vaultAPI.onIntegrationRequest) return;
+    return window.vaultAPI.onIntegrationRequest(handleIntegrationRequest);
+  }, [handleIntegrationRequest]);
+
   const filtered = entries.filter(e => {
     const inProject = view === "project" ? e.projectId === activeProject : true;
     const matchSearch = search ? (e.title + (e.note || "") + e.category + (e.tags?.join(" ") || "")).toLowerCase().includes(search.toLowerCase()) : true;
@@ -805,7 +991,18 @@ export default function App() {
                             <div className="entry-title">{e.title}</div>
                             <div className="entry-category">{e.category}</div>
                           </div>
-                          <div className="entry-value">{"•".repeat(Math.min(e.value.length, 24))}</div>
+                          <div className="entry-value" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {revealedEntryIds.has(e.id) ? e.value : "•".repeat(Math.min(e.value.length, 24))}
+                            </span>
+                            <button
+                              className="btn btn-ghost btn-icon btn-sm"
+                              title={revealedEntryIds.has(e.id) ? "Hide secret" : "Reveal secret"}
+                              onClick={() => toggleEntryReveal(e.id)}
+                            >
+                              <Icon d={revealedEntryIds.has(e.id) ? Icons.eyeOff : Icons.eye} size={12} />
+                            </button>
+                          </div>
                           <div className="entry-footer">
                             <div className="entry-tags">{e.tags?.slice(0, 3).map(t => <span key={t} className="tag">{t}</span>)}</div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -916,6 +1113,25 @@ export default function App() {
               </p>
               {backupDir && <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--accent2)", background: "var(--surface2)", padding: "8px 12px", borderRadius: 6, marginBottom: 10, wordBreak: "break-all" }}>{backupDir}</div>}
               <button className="btn btn-ghost" onClick={chooseBackupDir}><Icon d={Icons.folder} size={13} /> {backupDir ? "Change Folder" : "Choose Folder"}</button>
+            </div>
+            <div className="form-group">
+              <label className="form-label">LumaKit Integration</label>
+              <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+                Allows LumaKit to manage this unlocked vault through a local-only authenticated API.
+              </p>
+              <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={openLumaKitRepo}>
+                <Icon d={Icons.download} size={13} /> Get LumaKit
+              </button>
+              {integrationConfig && (
+                <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--accent2)", background: "var(--surface2)", padding: "8px 12px", borderRadius: 6, marginBottom: 10, wordBreak: "break-all" }}>
+                  {integrationConfig.enabled ? `http://${integrationConfig.host}:${integrationConfig.port}` : "Disabled"}
+                  <br />
+                  {integrationConfig.configPath}
+                </div>
+              )}
+              <button className={integrationConfig?.enabled ? "btn btn-danger" : "btn btn-ghost"} onClick={() => setIntegrationEnabled(!integrationConfig?.enabled)}>
+                <Icon d={integrationConfig?.enabled ? Icons.x : Icons.check} size={13} /> {integrationConfig?.enabled ? "Disable Integration" : "Enable Integration"}
+              </button>
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={() => setShowSettings(false)}>Done</button>

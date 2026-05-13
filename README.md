@@ -58,6 +58,19 @@ The backup file is fully encrypted. Even if someone gets the file, they can't re
 
 ---
 
+## Connect to LumaKit
+
+Lumalok can expose a local-only authenticated API for [LumaKit](https://github.com/patmakesapps/LumaKit), letting Lumi create projects, add secrets, list secret metadata, and review expiring secrets while your vault is unlocked.
+
+1. Open Lumalok and unlock your vault.
+2. Open **Settings**.
+3. Under **LumaKit Integration**, click **Enable Integration**.
+4. In LumaKit, use the Lumalok tools to connect to the local API.
+
+The integration writes connection details to `~/.lumalok/integration.json`. Secret values stay encrypted at rest and are only available while the Lumalok vault is unlocked.
+
+---
+
 ## Security Details
 
 | Feature | Implementation |

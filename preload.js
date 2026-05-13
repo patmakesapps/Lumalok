@@ -28,4 +28,33 @@ contextBridge.exposeInMainWorld('vaultAPI', {
   // Get the currently configured backup folder path
   getBackupDir: () =>
     ipcRenderer.invoke('vault:get-backup-dir'),
+
+  // Open a safe external URL in the user's browser
+  openExternal: (url) =>
+    ipcRenderer.invoke('app:open-external', url),
+
+  // Get local integration status for Lumi/LumaKit
+  getIntegrationConfig: () =>
+    ipcRenderer.invoke('integration:get-config'),
+
+  // Enable or disable the local integration API
+  setIntegrationEnabled: (enabled) =>
+    ipcRenderer.invoke('integration:set-enabled', enabled),
+
+  // Handle authenticated local API requests from the Electron main process
+  onIntegrationRequest: (handler) => {
+    const listener = async (_event, message) => {
+      try {
+        const result = await handler(message);
+        ipcRenderer.send('integration:response', { id: message.id, result });
+      } catch (err) {
+        ipcRenderer.send('integration:response', {
+          id: message.id,
+          error: err?.message || 'Integration request failed',
+        });
+      }
+    };
+    ipcRenderer.on('integration:request', listener);
+    return () => ipcRenderer.removeListener('integration:request', listener);
+  },
 });
